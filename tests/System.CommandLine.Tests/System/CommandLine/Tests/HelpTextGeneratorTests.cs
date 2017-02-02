@@ -1,11 +1,9 @@
 // Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-
 using Xunit;
 
 namespace System.CommandLine.Tests
@@ -479,12 +477,12 @@ namespace System.CommandLine.Tests
 
         private static string GetHelp(Action<ArgumentSyntax> defineAction)
         {
-            return CreateSyntax(defineAction).GetHelpText();
+            return CreateSyntax(defineAction).GetHelpText(72);
         }
 
         private static string GetHelp(string commandLine, Action<ArgumentSyntax> defineAction)
         {
-            return CreateSyntax(commandLine, defineAction).GetHelpText();
+            return CreateSyntax(commandLine, defineAction).GetHelpText(72);
         }
 
         private static string GetHelp(int maxWidth, Action<ArgumentSyntax> defineAction)

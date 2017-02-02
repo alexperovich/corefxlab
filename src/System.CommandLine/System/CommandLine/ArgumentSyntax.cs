@@ -434,16 +434,19 @@ namespace System.CommandLine
             return GetParameters(ActiveCommand);
         }
 
+        public HelpInfo GetHelpInfo()
+        {
+            return new HelpInfo(this);
+        }
+
         public string GetHelpText()
         {
-            // TODO: This should use Console.WindowWidth but this API isn't available yet.
-            // return GetHelpText(Console.WindowWidth - 2);
-            return GetHelpText(72);
+            return GetHelpText(Console.WindowWidth - 2);
         }
 
         public string GetHelpText(int maxWidth)
         {
-            return HelpTextGenerator.Generate(this, maxWidth);
+            return HelpTextGenerator.Generate(GetHelpInfo(), maxWidth);
         }
     }
 }

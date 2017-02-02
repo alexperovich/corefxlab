@@ -3,21 +3,24 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace System.CommandLine
 {
     internal static class HelpTextGenerator
     {
-        public static string Generate(ArgumentSyntax argumentSyntax, int maxWidth)
+        public static string Generate(HelpInfo helpInfo, int maxWidth)
         {
-            var forCommandList = argumentSyntax.ActiveCommand == null &&
-                                 argumentSyntax.Commands.Any();
-
-            var page = forCommandList
-                ? GetCommandListHelp(argumentSyntax)
-                : GetCommandHelp(argumentSyntax, argumentSyntax.ActiveCommand);
-
+            HelpPage page;
+            if (string.IsNullOrEmpty(helpInfo.ActiveCommandName) && helpInfo.Commands.Any())
+            {
+                page = GetCommandListHelp(helpInfo);
+            }
+            else
+            {
+                page = GetCommandHelp(helpInfo, helpInfo.ActiveCommandName);
+            }
             var sb = new StringBuilder();
             sb.WriteHelpPage(page, maxWidth);
             return sb.ToString();
@@ -110,23 +113,24 @@ namespace System.CommandLine
                 sb.AppendLine();
         }
 
-        private static HelpPage GetCommandListHelp(ArgumentSyntax argumentSyntax)
+        private static HelpPage GetCommandListHelp(HelpInfo info)
         {
             return new HelpPage
             {
-                ApplicationName = argumentSyntax.ApplicationName,
+                ApplicationName = info.ApplicationName,
                 SyntaxElements = GetGlobalSyntax(),
-                Rows = GetCommandRows(argumentSyntax).ToArray()
+                Rows = GetCommandRows(info).ToArray()
             };
         }
 
-        private static HelpPage GetCommandHelp(ArgumentSyntax argumentSyntax, ArgumentCommand command)
+        private static HelpPage GetCommandHelp(HelpInfo info, string commandName)
         {
+            var command = info.Commands.FirstOrDefault(c => c.Name == commandName);
             return new HelpPage
             {
-                ApplicationName = argumentSyntax.ApplicationName,
-                SyntaxElements = GetCommandSyntax(argumentSyntax, command),
-                Rows = GetArgumentRows(argumentSyntax, command).ToArray()
+                ApplicationName = info.ApplicationName,
+                SyntaxElements = GetCommandSyntax((OperationInfo) command ?? info),
+                Rows = GetArgumentRows((OperationInfo) command ?? info).ToArray()
             };
         }
 
@@ -136,33 +140,32 @@ namespace System.CommandLine
             yield return @"[<args>]";
         }
 
-        private static IEnumerable<string> GetCommandSyntax(ArgumentSyntax argumentSyntax, ArgumentCommand command)
+        private static IEnumerable<string> GetCommandSyntax(OperationInfo info)
         {
-            if (command != null)
+            if (info is CommandInfo command)
                 yield return command.Name;
 
-            foreach (var option in argumentSyntax.GetOptions(command).Where(o => !o.IsHidden))
+            foreach (var option in info.Options)
                 yield return GetOptionSyntax(option);
 
-            if (argumentSyntax.GetParameters(command).All(p => p.IsHidden))
-                yield break;
-
-            if (argumentSyntax.GetOptions(command).Any(o => !o.IsHidden))
+            if (info.Options.Any() && info.Parameters.Any())
+            {
                 yield return @"[--]";
+            }
 
-            foreach (var parameter in argumentSyntax.GetParameters(command).Where(o => !o.IsHidden))
+            foreach (var parameter in info.Parameters)
                 yield return GetParameterSyntax(parameter);
         }
 
-        private static string GetOptionSyntax(Argument option)
+        private static string GetOptionSyntax(OptionInfo option)
         {
             var sb = new StringBuilder();
 
             sb.Append(@"[");
-            sb.Append(option.GetDisplayName());
+            sb.Append(option.DisplayName);
 
             if (!option.IsFlag)
-                sb.Append(option.IsRequired ? @" <arg>" : @" [arg]");
+                sb.Append(option.IsValueRequired ? @" <arg>" : @" [arg]");
 
             if (option.IsList)
                 sb.Append(@"...");
@@ -172,36 +175,37 @@ namespace System.CommandLine
             return sb.ToString();
         }
 
-        private static string GetParameterSyntax(Argument parameter)
+        private static string GetParameterSyntax(ParameterInfo parameter)
         {
             var sb = new StringBuilder();
 
-            sb.Append(parameter.GetDisplayName());
+            sb.Append(parameter.DisplayName);
             if (parameter.IsList)
                 sb.Append(@"...");
 
             return sb.ToString();
         }
 
-        private static IEnumerable<HelpRow> GetCommandRows(ArgumentSyntax argumentSyntax)
+        private static IEnumerable<HelpRow> GetCommandRows(HelpInfo info)
         {
-            return argumentSyntax.Commands
-                              .Where(c => !c.IsHidden)
-                              .Select(c => new HelpRow { Header = c.Name, Text = c.Help });
+            return info.Commands
+                .Select(c => new HelpRow {Header = c.Name, Text = c.Help});
         }
 
-        private static IEnumerable<HelpRow> GetArgumentRows(ArgumentSyntax argumentSyntax, ArgumentCommand command)
+        private static IEnumerable<HelpRow> GetArgumentRows(OperationInfo info)
         {
-            return argumentSyntax.GetArguments(command)
-                              .Where(a => !a.IsHidden)
-                              .Select(a => new HelpRow { Header = GetArgumentRowHeader(a), Text = a.Help });
+            foreach (var option in info.Options)
+                yield return new HelpRow { Header = GetArgumentRowHeader(option), Text = option.Help};
+
+            foreach (var parameter in info.Parameters)
+                yield return new HelpRow { Header = GetArgumentRowHeader(parameter), Text = parameter.Help};
         }
 
-        private static string GetArgumentRowHeader(Argument argument)
+        private static string GetArgumentRowHeader(ArgumentInfo parameter)
         {
             var sb = new StringBuilder();
 
-            foreach (var displayName in argument.GetDisplayNames())
+            foreach (var displayName in parameter.DisplayNames)
             {
                 if (sb.Length > 0)
                     sb.Append(@", ");
@@ -209,10 +213,12 @@ namespace System.CommandLine
                 sb.Append(displayName);
             }
 
-            if (argument.IsOption && !argument.IsFlag)
-                sb.Append(argument.IsRequired ? @" <arg>" : @" [arg]");
+            if (parameter is OptionInfo option && !option.IsFlag)
+            {
+                sb.Append(option.IsValueRequired ? @" <arg>" : @" [arg]");
+            }
 
-            if (argument.IsList)
+            if (parameter.IsList)
                 sb.Append(@"...");
 
             return sb.ToString();
